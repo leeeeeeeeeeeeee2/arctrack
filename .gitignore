@@ -1,0 +1,15 @@
+# PlatformIO
+firmware/.pio/
+firmware/.pio*
+.pio/
+
+# SKiDL / KiCad generated
+hardware/RocketFC.net
+*.bak
+*-cache.lib
+*.kicad_pcb-bak
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
