@@ -1,153 +1,133 @@
-# RocketFC — Hardware Design (ESP32-C3)
+# RocketFC — Hardware Design (bare ESP32-C3FH4 + chip antenna)
 
-This is the electrical spec for the board. Everything the firmware and KiCad need
-is here. Read it top to bottom before you start placing parts.
+Full bare-chip flight computer. Everything the SuperMini gave us for free
+(regulator, USB, buttons, reset) is now on our board, plus the RF section
+(crystal + antenna + matching). Keep this open while working in KiCad.
 
-## 1. Block diagram
+> **RF WARNING:** the antenna matching network usually needs tuning to work well,
+> ideally with a VNA. To de-risk, copy component **values and layout** from
+> Espressif's *ESP32-C3 Hardware Design Guidelines* reference schematic + the
+> ESP32-C3-MINI-1 module schematic. Those are the known-good source of truth.
+
+## 0. Main chip
+
+Use **ESP32-C3FH4** (QFN-32, 5×5mm) — it has **4MB flash built in**, so no
+external flash chip needed. (ESP32-C3FN4 is the same idea.)
+
+Wire by **pin NAME** using the KiCad symbol — pin numbers vary, names don't.
+
+## 1. Power
 
 ```
-              +----------------------- USB-C (power + programming) --------+
-              |                                                            |
-   LiPo 1S --> [SW1 slide switch] --> [TP4056 charger] --> VBAT --+        |
-   (JST PH2.0)                                                    |        |
-                                                                  v        v
-                                                       [AMS1117-3.3 LDO]  (D+/D- to ESP32-C3 GPIO19/18)
-                                                                  |
-                                                                3V3 rail
-                                                                  |
-        +----------------+----------------+----------------+------+-------------------+
-        |                |                |                |                          |
-   ESP32-C3         BMP280 (I2C)     MPU-6050 (I2C)   microSD (SPI)          ATGM336H GPS (UART)
-   -MINI-1                                                                   + servo headers (PWM)
+USB-C VBUS(5V) --> TP4056 --> LiPo(BAT) --> SW1 --> LDO(3.3V) --> +3V3 rail
+                     |                                   (ME6211C33 / AMS1117)
+                   charge
 ```
 
-## 2. Power design
+- **USB-C**: VBUS→5V net; GND→GND; D+→GPIO19; D−→GPIO18; CC1,CC2 each 5.1kΩ→GND.
+- **TP4056**: IN←VBUS; BAT↔LiPo+; PROG→12kΩ→GND (~100mA); CE→IN; GND→GND.
+- **SW1** slide switch: LiPo+ → LDO input (arms logic; charger stays on the cell).
+- **LDO**: prefer **ME6211C33M5** (SOT-23-5, 150mV dropout — good at low LiPo V)
+  over AMS1117 (1.1V dropout). IN←switched battery; OUT→+3V3; EN→IN; 1µF in, 1µF+
+  10µF out.
+- Bulk: 10µF on VBUS, 10µF on battery, 22µF on +3V3.
 
-- **Battery:** 1S LiPo (3.7V nominal, 4.2V full), e.g. 402035 200mAh, JST PH 2.0mm.
-- **Charging:** TP4056 (SOT-23-5 or the common module chip). Program charge
-  current with `RPROG`. For a 200mAh cell use ~0.5C = ~100mA → **RPROG ≈ 12kΩ**
-  gives ~100mA (I = 1200 / RPROG(kΩ) in A... use the TP4056 table; 20kΩ≈60mA,
-  10kΩ≈130mA). Pick **12kΩ ≈ 100mA**. Don't fast-charge tiny cells.
-- **Regulator:** AMS1117-3.3 (SOT-223). Input from VBAT (or USB 5V), output 3V3.
-  - Note: AMS1117 dropout is ~1.1V, so at low LiPo voltage (~3.5V) the 3V3 rail
-    can sag. For a flight that lasts minutes on a freshly charged cell this is
-    fine. If you want rock-solid 3V3 at low battery, swap AMS1117 for an
-    **ME6211C33** (150mV dropout) later — same idea, better margin.
-- **Input caps:** 10µF on VBAT-in and 5V-in, **22µF** on 3V3 out, plus 100nF
-  decoupling next to each IC's VDD pin.
-- **USB vs battery:** TP4056 charges the cell from USB while the AMS1117 runs the
-  board from whichever is higher. Simple approach: AMS1117 input = VBAT node,
-  TP4056 keeps the cell topped up from USB. (An "ideal-diode" power-mux is nicer
-  but not required for a hobby board.)
+## 2. ESP32-C3FH4 core wiring
 
-## 3. Pin assignments (ESP32-C3-MINI-1)
+### Supply pins (all to +3V3, each with its own 100nF)
+- `VDD3P3` (all instances) → +3V3, 100nF each
+- `VDD3P3_CPU` → +3V3, 100nF
+- `VDD3P3_RTC` → +3V3, 100nF
+- `VDDA` / analog VDD3P3 → +3V3 via a **small ferrite bead / 0Ω** for RF cleanliness,
+  then 100nF + 10µF (see reference)
+- `VDD_SPI` → **1µF to GND** (internal LDO output for in-package flash; do NOT tie
+  to 3V3 — follow reference)
+- EP (exposed pad) → GND (stitch with vias)
 
-The ESP32-C3 has limited GPIO. This map avoids strapping-pin conflicts.
+### Enable / reset
+- `CHIP_EN` (EN) → 10kΩ pull-up to +3V3, **1µF** to GND (reset RC).
+- Optional **RESET button**: EN → button → GND.
 
-| Function        | Signal        | ESP32-C3 GPIO | Notes |
-|-----------------|---------------|---------------|-------|
-| USB data −      | USB_D−        | GPIO18        | native USB, fixed |
-| USB data +      | USB_D+        | GPIO19        | native USB, fixed |
-| I2C data        | SDA           | GPIO4         | BMP280 + MPU-6050 shared |
-| I2C clock       | SCL           | GPIO5         | shared |
-| SD clock        | SPI_SCK       | GPIO6         | |
-| SD data out     | SPI_MOSI      | GPIO7         | |
-| SD data in      | SPI_MISO      | GPIO3         | |
-| SD chip select  | SD_CS         | GPIO10        | |
-| GPS → ESP       | UART1_RX      | GPIO20        | receives ATGM336H TX |
-| ESP → GPS       | UART1_TX      | GPIO21        | to ATGM336H RX |
-| Servo 1 (TVC)   | PWM1          | GPIO0         | header, 5V servo power |
-| Servo 2 (TVC)   | PWM2          | GPIO1         | header |
-| Boot button     | BOOT          | GPIO9         | strapping: pull-up 10k, button to GND |
-| Status LED      | LED           | GPIO8         | strapping: LED+220Ω to 3V3 (LED lit=low) |
+### Strapping pins (critical for boot)
+- `GPIO2` → 10kΩ pull-up to +3V3 (must be high at boot; keep nothing pulling it low)
+- `GPIO8` → 10kΩ pull-up to +3V3 (must be high at boot)
+- `GPIO9` → 10kΩ pull-up to +3V3 + **BOOT button** to GND (hold low at reset = flash mode)
 
-**Strapping pins** on ESP32-C3 are GPIO2, GPIO8, GPIO9 — keep GPIO2 unused,
-GPIO8 only drives an LED, GPIO9 is the boot button. Do not hang I2C/SPI devices
-on these.
+### USB (native — no USB-UART chip)
+- `GPIO18` → USB_D−
+- `GPIO19` → USB_D+
+- (optional USBLC6-2 ESD device on D+/D−)
 
-## 4. Netlist (connection table)
+### Clock
+- 40 MHz crystal between `XTAL_P` and `XTAL_N`.
+- Two load caps to GND (start ~**10–12pF** each; exact value = 2×(CL−Cstray),
+  from the crystal datasheet). Some designs also add a small series R (~0Ω).
 
-### ESP32-C3-MINI-1
-| Pin | Net |
-|-----|-----|
-| 3V3 | +3V3 |
-| GND (all) | GND |
-| EN | +3V3 via 10k, 100nF to GND (reset RC) |
-| GPIO18 | USB_D− |
-| GPIO19 | USB_D+ |
-| GPIO4 | SDA |
-| GPIO5 | SCL |
-| GPIO6 | SPI_SCK |
-| GPIO7 | SPI_MOSI |
-| GPIO3 | SPI_MISO |
-| GPIO10 | SD_CS |
-| GPIO20 | GPS_TX (into ESP) |
-| GPIO21 | GPS_RX (out of ESP) |
-| GPIO0 | SERVO1 |
-| GPIO1 | SERVO2 |
-| GPIO9 | BOOT |
-| GPIO8 | LED |
+## 3. RF section (antenna + matching) — copy the reference!
 
-### I2C bus
-- `SDA` and `SCL` each pulled up to +3V3 with **4.7kΩ**.
-- BMP280: VDD→3V3, GND→GND, SDA→SDA, SCL→SCL, SDO→GND (addr 0x76), CSB→3V3 (I2C mode).
-- MPU-6050: VDD→3V3, GND→GND, SDA→SDA, SCL→SCL, AD0→GND (addr 0x68), INT→ n/c.
+- `LNA_IN` (RF pin) → **pi-matching network** → 50Ω feed line → **chip antenna**.
+- Pi network = 3 footprints: shunt C1 (to GND), series L, shunt C2 (to GND).
+  Start with **L = series 0Ω/2.7nH, C1/C2 = unpopulated (DNP)**, then tune. Use
+  the antenna vendor's app note values as the starting point.
+- **Chip antenna**: e.g. Johanson 2450AT18A100 or similar 2.4GHz ceramic. Follow
+  its datasheet **ground keep-out** exactly (a copper-free region under/around it).
+- **50Ω trace**: keep short; on 1.6mm 2-layer FR4 a top trace over the ground
+  plane ≈ 2.9mm wide for 50Ω (use KiCad's calculator with your stackup).
+- Nothing (no copper/ground pour) under the antenna keep-out.
 
-### microSD (SPI, push-pull socket)
-- VDD→3V3 (add 10µF), GND→GND
-- CLK→SPI_SCK, CMD/DI→SPI_MOSI, DAT0/DO→SPI_MISO, CD/DAT3→SD_CS
-- 10kΩ pull-ups on MISO and CS recommended.
+## 4. Pin assignments (peripherals — same as before, firmware unchanged)
 
-### ATGM336H GPS (4-pin header)
-- VCC→3V3 (module accepts 3.3V), GND→GND
-- TX→GPIO20 (ESP RX), RX→GPIO21 (ESP TX)
-- Add 10µF near the module VCC (GPS current spikes).
+| Function        | Signal   | GPIO  | Notes |
+|-----------------|----------|-------|-------|
+| I2C data        | SDA      | GPIO4 | BMP280 + MPU-6050 |
+| I2C clock       | SCL      | GPIO5 | |
+| SD clock        | SPI_SCK  | GPIO6 | |
+| SD data out     | SPI_MOSI | GPIO7 | |
+| SD data in      | SPI_MISO | GPIO3 | |
+| SD chip select  | SD_CS    | GPIO10| |
+| GPS → ESP       | UART1_RX | GPIO20| |
+| ESP → GPS       | UART1_TX | GPIO21| |
+| USB D−          | —        | GPIO18| native USB |
+| USB D+          | —        | GPIO19| native USB |
+| Status LED      | LED      | GPIO8 | LED+220Ω to +3V3 (also strapping-pulled high) |
 
-### USB-C (programming/charging)
-- VBUS→5V net (into TP4056 + AMS1117 input path)
-- GND→GND
-- D+→GPIO19, D−→GPIO18
-- CC1/CC2 each to GND via **5.1kΩ** (marks device as UFP so a charger supplies 5V)
-- Optional ESD diodes on D+/D−.
+## 5. Sensors (bare chips) — you've already wired most of this
 
-### TP4056 charger
-- VCC/IN→5V (from USB VBUS), GND→GND
-- BAT→VBAT (to battery + / JST), through the slide switch to the AMS1117 input
-- PROG→ 12kΩ to GND (≈100mA charge)
-- CE→VCC (enable)
-- CHRG/STDBY LEDs optional (LED + 1kΩ to VCC)
+### I2C pull-ups
+- 4.7kΩ from SDA→+3V3 and SCL→+3V3.
 
-### AMS1117-3.3 regulator
-- IN→VBAT (switched), 10µF in
-- OUT→+3V3, 22µF out
-- GND→GND
+### BMP280
+- VDD (8)→+3V3 (100nF), VDDIO (6)→+3V3 (100nF), GND (1)→GND, GND (7)→GND
+- SDI (5)→SDA, SCK (4)→SCL, SDO (3)→GND (0x76), CSB (2)→+3V3 (I2C mode)
 
-### Slide switch SW1
-- In series between TP4056 BAT (battery +) and AMS1117 IN. Cuts power to the
-  logic without disconnecting the charger from the cell.
+### MPU-6050
+- VDD (13)→+3V3 (100nF), VLOGIC (8)→+3V3 (10nF), GND (18)→GND
+- REGOUT (10)→100nF to GND (REQUIRED), CPOUT (20)→2.2nF to GND (REQUIRED)
+- SDA (24)→SDA, SCL (23)→SCL, AD0 (9)→GND (0x68)
+- FSYNC (11)→GND, CLKIN (1)→GND
+- INT (12), AUX_DA (6), AUX_CL (7) → No-Connect
 
-## 5. Layout / routing notes
+## 6. microSD (SPI)
+- VDD→+3V3 (10µF), GND→GND
+- CLK→SPI_SCK, CMD→SPI_MOSI, DAT0→SPI_MISO, DAT3→SD_CS
+- 10kΩ pull-ups on MISO and CS.
 
-- Put the **ESP32-C3 antenna** at the board edge with the keep-out area under the
-  antenna clear of copper (no ground pour under the antenna). Point it away from
-  metal / battery.
-- Keep the **BMP280 away from heat and airflow**; add a small vent hole in the
-  payload bay, not a sealed cavity, or the pressure reading lags. Do NOT put a
-  copper pour directly under it that connects to hot parts.
-- Mount the **MPU-6050 near the center axis** of the rocket and align its X/Y/Z
-  with the rocket body; note the orientation in firmware.
-- Star-ground the analog-ish parts; solid ground pour on an inner/back layer.
-- Decoupling caps (100nF) go **as close as possible** to each IC power pin.
-- Route USB D+/D− as a **differential pair**, short and equal length, away from
-  the switching-ish nodes.
-- Keep GPS antenna trace short; if using the ATGM336H module its antenna is
-  onboard — keep it near the top of the payload with a clear view of the sky.
-- Add **mounting holes** and a couple of **test pads** (3V3, GND, TX, RX).
+## 7. GPS (ATGM336H, 4-pin header)
+- VCC→+3V3 (10µF), GND→GND, module TX→GPIO20, module RX→GPIO21.
 
-## 6. Firmware pin defines (keep in sync)
+## 8. Layout / routing notes (RF matters now)
+- **Antenna at a board edge/corner**, its keep-out zone kept 100% copper-free
+  (no ground pour, no traces). Everything else stays away from it.
+- Solid **ground plane** on the opposite layer; stitch the chip's EP and grounds
+  with lots of vias.
+- Keep the **40MHz crystal** right next to the chip, short traces, guarded by
+  ground, load caps close.
+- Keep the **RF trace** (LNA_IN → antenna) short, 50Ω, over unbroken ground.
+- Decoupling caps hug each supply pin; analog supply gets the ferrite + extra cap.
+- Route USB D+/D− as a short, equal-length differential pair.
+- BMP280 gets air (vent, not sealed); MPU-6050 near the rocket's center axis.
 
-These match `firmware/src/main.cpp`:
-
+## 9. Firmware pin defines (unchanged)
 ```cpp
 #define PIN_SDA     4
 #define PIN_SCL     5
@@ -155,9 +135,7 @@ These match `firmware/src/main.cpp`:
 #define PIN_SD_MOSI 7
 #define PIN_SD_MISO 3
 #define PIN_SD_CS   10
-#define PIN_GPS_RX  20   // ESP receives GPS TX here
-#define PIN_GPS_TX  21   // ESP transmits to GPS RX
-#define PIN_SERVO1  0
-#define PIN_SERVO2  1
+#define PIN_GPS_RX  20
+#define PIN_GPS_TX  21
 #define PIN_LED     8
 ```

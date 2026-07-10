@@ -1,0 +1,61 @@
+### Footprint positions - created on 2026-07-10T19:49:32+0100 ###
+### Printed by KiCad version 9.0.7
+## Unit = mm, Angle = deg.
+## Side : top
+# Ref     Val                    Package                                                     PosX       PosY       Rot  Side
+AE1       Antenna                Johanson_2450AT43F0100                                  147.0000   -82.6500   90.0000  top
+BZ1       Buzzer                 Buzzer_Mallory_AST1109MLTRQ                             166.5000  -104.0000    0.0000  top
+C1        100n                   C_0402_1005Metric                                       151.0000   -80.5000    0.0000  top
+C2        100n                   C_0402_1005Metric                                       151.0200   -82.5000  180.0000  top
+C3        10n                    C_0402_1005Metric                                       150.5000   -88.0400   90.0000  top
+C4        100n                   C_0402_1005Metric                                       147.0000   -93.0000  -90.0000  top
+C5        100n                   C_0402_1005Metric                                       148.5000   -93.4800   90.0000  top
+C6        2.2n                   C_0402_1005Metric                                       160.5000   -77.5000    0.0000  top
+C7        100n                   C_0402_1005Metric                                       151.5000   -88.0000   90.0000  top
+C8        100n                   C_0402_1005Metric                                       152.5000   -88.0200   90.0000  top
+C9        100n                   C_0402_1005Metric                                       149.5000   -88.0000   90.0000  top
+C10       100n                   C_0402_1005Metric                                       148.5000   -88.0000   90.0000  top
+C11       1u                     C_0402_1005Metric                                       157.0200   -82.0000    0.0000  top
+C12       1u                     C_0402_1005Metric                                       150.0200   -95.0000    0.0000  top
+C13       10p                    C_0402_1005Metric                                       162.0300   -94.9800  -90.0000  top
+C14       10p                    C_0402_1005Metric                                       160.0600   -94.9800  -90.0000  top
+C15       22u                    C_0805_2012Metric                                       154.0000   -79.5000   90.0000  top
+C16       10u                    C_0805_2012Metric                                       153.5000   -83.0500  -90.0000  top
+C17       10u                    C_0805_2012Metric                                       143.5500   -90.0000    0.0000  top
+C18       10u                    C_0805_2012Metric                                       143.5500   -93.0000  180.0000  top
+C19       1p                     C_0402_1005Metric                                       165.0000   -95.0000  -90.0000  top
+C20       1p                     C_0402_1005Metric                                       163.0300   -95.0000  -90.0000  top
+C21       10uF                   C_0805_2012Metric                                       164.8400  -110.7800    0.0000  top
+C22       10uF                   C_0805_2012Metric                                       174.5000   -95.5000    0.0000  top
+C23       100uF                  C_0805_2012Metric                                       174.5000   -98.5100    0.0000  top
+D1        LED                    LED_0402_1005Metric                                     170.5150   -62.5000    0.0000  top
+J1        USBC_CHARGE_PORT       USB_C_Receptacle_HRO_TYPE-C-31-M-12                     175.9500   -75.8200   90.0000  top
+J2        JST_BATTERY_CONNECTOR  JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical                   175.0000   -55.5000    0.0000  top
+J3        Micro_SD_Card          microSD_HC_Hirose_DM3AT-SF-PEJM5                        150.5000   -61.0000  -90.0000  top
+J4        GPS_HEADERS            PinHeader_1x04_P2.54mm_Vertical                         162.5000   -54.9200    0.0000  top
+J5        SERVO                  PinHeader_1x03_P2.54mm_Vertical                         174.5000   -85.9600    0.0000  top
+L1        2.7nH                  L_0402_1005Metric                                       157.0150   -81.0000    0.0000  top
+L2        2.2uH                  L_0402_1005Metric                                       168.5200  -110.2700    0.0000  top
+R1        10k                    R_0402_1005Metric                                       154.4900   -93.0100  -90.0000  top
+R2        10k                    R_0402_1005Metric                                       152.5000   -93.0100  -90.0000  top
+R3        10k                    R_0402_1005Metric                                       165.5000   -93.0100   90.0000  top
+R4        10k                    R_0402_1005Metric                                       164.0000   -92.0000   90.0000  top
+R5        5.1k                   R_0402_1005Metric                                       168.0000   -91.0000  -90.0000  top
+R6        5.1k                   R_0402_1005Metric                                       166.0100   -91.0000  -90.0000  top
+R7        12k                    R_0402_1005Metric                                       171.0100   -87.0000    0.0000  top
+R8        4.7k                   R_0402_1005Metric                                       155.9900   -93.0200   90.0000  top
+R9        4.7k                   R_0402_1005Metric                                       157.9800   -93.0200   90.0000  top
+R10       10k                    R_0402_1005Metric                                       159.0000   -82.0100   90.0000  top
+R11       10k                    R_0402_1005Metric                                       162.5000   -78.0100   90.0000  top
+R12       330Ω                   R_0402_1005Metric                                       171.0000   -85.5000    0.0000  top
+R13       510k                   R_0402_1005Metric                                       171.0000   -82.5000    0.0000  top
+R14       100k                   R_0402_1005Metric                                       171.0000   -84.0000    0.0000  top
+SW1       POWER_SWITCH           SW_SPDT_PCM12                                           177.1700   -65.0000   90.0000  top
+U1        MPU-6050               InvenSense_QFN-24_4x4mm_P0.5mm                          166.0500   -83.2500    0.0000  top
+U2        BMP280                 Bosch_LGA-8_2x2.5mm_P0.65mm_ClockwisePinNumbering       164.5250   -88.7000  180.0000  top
+U3        AMS_REG                SOT-223-3_TabPin2                                       157.8500   -73.0000    0.0000  top
+U4        ESP32-C3FH4            QFN-32-1EP_5x5mm_P0.5mm_EP3.7x3.7mm                     157.5000   -87.5000    0.0000  top
+U5        TP4056-42-ESOP8        SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm_ThermalVias   146.0000   -73.0000    0.0000  top
+U6        SERVO_5V_BOOST         SOT-23-6                                                170.3625   -67.5500    0.0000  top
+Y1        40MHz                  Crystal_SMD_2012-2Pin_2.0x1.2mm                         160.8000   -92.5000  180.0000  top
+## End

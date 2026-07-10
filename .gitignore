@@ -8,6 +8,13 @@ hardware/RocketFC.net
 *.bak
 *-cache.lib
 *.kicad_pcb-bak
+**/fp-info-cache
+**/_autosave*
+**/*-backups/
+**/*.lck
+**/*.dsn
+**/*.ses
+hardware/gerbers/*.zip
 
 # OS / editor
 .DS_Store

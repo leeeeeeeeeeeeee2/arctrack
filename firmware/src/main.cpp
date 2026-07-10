@@ -1,12 +1,13 @@
-// RocketFC — ESP32-C3 model rocket flight computer
+// ArcTrack — ESP32-C3 model rocket flight computer
 //
 // - BMP280 barometer  -> altitude (relative to ground) + apogee detection
 // - MPU-6050 IMU      -> accel/gyro, launch/burnout detection
 // - ATGM336H GPS      -> lat/lon/alt/speed/sats (UART)
 // - microSD           -> CSV flight log (SPI)
 // - WiFi AP + web page -> live tracking from your phone
+// - Buzzer (GPIO0) + servo (GPIO1) for apogee / nose deploy
 //
-// Pin map MUST match hardware/DESIGN.md.
+// Pin map MUST match hardware/DESIGN.md / WIRING.md.
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -18,6 +19,7 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <TinyGPSPlus.h>
+#include <math.h>
 
 // ---------------------------------------------------------------- pins
 #define PIN_SDA      4
@@ -28,12 +30,12 @@
 #define PIN_SD_CS    10
 #define PIN_GPS_RX   20   // ESP receives GPS TX here
 #define PIN_GPS_TX   21   // ESP transmits to GPS RX
-#define PIN_SERVO1   0
-#define PIN_SERVO2   1
-#define PIN_LED      8    // active-low (LED to 3V3)
+#define PIN_BUZZER   0    // active buzzer (low side)
+#define PIN_SERVO    1    // parachute / nose deploy PWM
+// Power LED is hardwired to +3V3 on the PCB (no GPIO)
 
 // ---------------------------------------------------------------- config
-static const char*    AP_SSID     = "RocketFC";
+static const char*    AP_SSID     = "ArcTrack";
 static const char*    AP_PASS     = "launch123";   // >=8 chars
 static const uint32_t GPS_BAUD    = 9600;          // ATGM336H default
 static const uint32_t SAMPLE_HZ   = 20;            // log/telemetry rate
@@ -58,6 +60,7 @@ File logFile;
 float groundPressureHpa = SEA_LEVEL_HPA_DEFAULT;
 float groundAltM        = 0.0f;
 bool  launched          = false;
+bool  deployed          = false;
 uint32_t launchMs       = 0;
 
 // latest telemetry (shared with web handlers)
@@ -76,18 +79,30 @@ struct Telemetry {
 } tel;
 
 // ---------------------------------------------------------------- helpers
-static void ledOn()  { digitalWrite(PIN_LED, LOW); }
-static void ledOff() { digitalWrite(PIN_LED, HIGH); }
+// Active buzzer: drive low side (pin to GND side of buzzer)
+static void buzzOn()  { digitalWrite(PIN_BUZZER, LOW); }
+static void buzzOff() { digitalWrite(PIN_BUZZER, HIGH); }
 
-static void blink(int n, int ms) {
-  for (int i = 0; i < n; i++) { ledOn(); delay(ms); ledOff(); delay(ms); }
+static void beep(int n, int ms) {
+  for (int i = 0; i < n; i++) { buzzOn(); delay(ms); buzzOff(); delay(ms); }
 }
+
+// Simple servo PWM on LEDC (ESP32-C3)
+static const int SERVO_CH = 0;
+static void servoWriteUs(int us) {
+  // 50 Hz, 16-bit duty approx: duty = us / 20000 * 65535
+  uint32_t duty = (uint32_t)((us / 20000.0f) * 65535.0f);
+  ledcWrite(SERVO_CH, duty);
+}
+static void servoStow()    { servoWriteUs(1000); }  // ~0 deg — tune for your linkage
+static void servoDeploy()  { servoWriteUs(2000); }  // ~180 deg — tune for nose release
+
 
 // ---------------------------------------------------------------- web page
 static const char INDEX_HTML[] PROGMEM = R"HTML(
 <!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RocketFC Live</title>
+<title>ArcTrack Live</title>
 <style>
   body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0b1020;color:#e7ecf5}
   header{padding:16px;background:#131a33;font-size:20px;font-weight:700}
@@ -101,7 +116,7 @@ static const char INDEX_HTML[] PROGMEM = R"HTML(
   .dot{height:10px;width:10px;border-radius:50%;display:inline-block;margin-right:6px}
   .ok{background:#2ecc71}.no{background:#e74c3c}
 </style></head><body>
-<header>&#128640; RocketFC Live Tracking</header>
+<header>&#128640; ArcTrack Live Tracking</header>
 <div class="grid">
   <div class="card"><div class="k">Altitude (AGL)</div><div class="v" id="alt">--</div></div>
   <div class="card"><div class="k">Apogee</div><div class="v" id="max">--</div></div>
@@ -207,11 +222,15 @@ static void initSD() {
 }
 
 void setup() {
-  pinMode(PIN_LED, OUTPUT);
-  ledOff();
+  pinMode(PIN_BUZZER, OUTPUT);
+  buzzOff();
+  ledcSetup(SERVO_CH, 50, 16);          // 50 Hz servo
+  ledcAttachPin(PIN_SERVO, SERVO_CH);
+  servoStow();
+
   Serial.begin(115200);
   delay(300);
-  Serial.println("\nRocketFC boot");
+  Serial.println("\nArcTrack boot");
 
   initSensors();
   calibrateGround();
@@ -227,7 +246,7 @@ void setup() {
   server.on("/data", handleData);
   server.begin();
 
-  blink(3, 120);
+  beep(3, 120);
   Serial.println("ready");
 }
 
@@ -270,6 +289,20 @@ static void detectLaunch() {
     launched = true;
     launchMs = millis();
     Serial.println(">>> LAUNCH detected");
+    beep(1, 80);
+  }
+}
+
+// Deploy once after apogee: altitude falls ~3 m from peak, and we've been flying a bit
+static void detectApogeeDeploy() {
+  if (!launched || deployed) return;
+  if (millis() - launchMs < 800) return;          // ignore early noise
+  if (tel.maxAltM < 5.0f) return;                 // need some altitude
+  if (tel.altM < tel.maxAltM - 3.0f) {
+    deployed = true;
+    servoDeploy();
+    beep(3, 100);
+    Serial.println(">>> APOGEE deploy");
   }
 }
 
@@ -295,8 +328,8 @@ void loop() {
     nextSample = now + periodMs;
     sampleSensors();
     detectLaunch();
+    detectApogeeDeploy();
     logRow();
-    if (launched) ledOn(); else if ((now / 500) % 2) ledOn(); else ledOff();
   }
 
   // flush SD periodically (and faster during flight) so a crash keeps data
